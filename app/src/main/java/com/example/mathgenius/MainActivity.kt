@@ -672,8 +672,9 @@ fun ResultsScreen(name: String, score: Int, total: Int, modeName: String, mistak
     val seconds = timeSpent % 60
     val timeFormatted = String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
 
+    val mistakeCount = total - score
     LaunchedEffect(Unit) {
-        if (mistakes.size >= 4) {
+        if (mistakeCount >= 4) {
             val mediaPlayer = MediaPlayer.create(context, R.raw.laugh)
             mediaPlayer?.start()
             mediaPlayer?.setOnCompletionListener { it.release() }
@@ -693,22 +694,23 @@ fun ResultsScreen(name: String, score: Int, total: Int, modeName: String, mistak
         Surface(color = Color(0xFFFFEB3B), modifier = Modifier.padding(vertical = 16.dp)) {
             Text("PLEASE SCREENSHOT YOUR RESULTS", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.ExtraBold)
         }
-        Text("Mistake Review:", modifier = Modifier.align(Alignment.Start).padding(bottom = 8.dp), fontWeight = FontWeight.Bold)
-        LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
-            items(mistakes) { m ->
-                Surface(tonalElevation = 3.dp, modifier = Modifier.padding(vertical = 6.dp).fillMaxWidth(), shape = MaterialTheme.shapes.medium) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text("Question: ${m.question}", fontWeight = FontWeight.Bold)
-                        Row {
-                            Text("Yours: ", fontSize = 14.sp)
-                            Text(m.userAnswer, color = Color.Red, fontWeight = FontWeight.Bold)
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Text("Correct: ", fontSize = 14.sp)
-                            Text(m.correctAnswer, color = Color(0xFF2E7D32), fontWeight = FontWeight.Bold)
+        if (mistakes.isNotEmpty()) {
+            Text("Mistake Review:", modifier = Modifier.align(Alignment.Start).padding(bottom = 8.dp), fontWeight = FontWeight.Bold)
+            LazyColumn(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                items(mistakes) { m ->
+                    Surface(tonalElevation = 3.dp, modifier = Modifier.padding(vertical = 6.dp).fillMaxWidth(), shape = MaterialTheme.shapes.medium) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text("Question: ${m.question}", fontWeight = FontWeight.Bold)
+                            Row {
+                                Text("Your Answer: ", fontSize = 14.sp)
+                                Text(m.userAnswer, color = Color.Red, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
             }
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
         }
         Button(onClick = onRestart, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) { Text("NEW TEST") }
     }

@@ -72,7 +72,10 @@ fun ScienceApp(userName: String, onExit: () -> Unit, onSaveScore: (ScoreRecord) 
                             is ScienceScreen.LevelSelection -> onExit()
                             is ScienceScreen.TopicSelection -> currentScreen = ScienceScreen.LevelSelection
                             is ScienceScreen.GameModeSelection -> currentScreen = ScienceScreen.TopicSelection((currentScreen as ScienceScreen.GameModeSelection).level)
-                            is ScienceScreen.Exercise -> currentScreen = ScienceScreen.TopicSelection((currentScreen as ScienceScreen.Exercise).level)
+                            is ScienceScreen.Exercise -> {
+                                val currentLevel = (currentScreen as ScienceScreen.Exercise).level
+                                currentScreen = ScienceScreen.TopicSelection(currentLevel)
+                            }
                             is ScienceScreen.Result -> currentScreen = ScienceScreen.LevelSelection
                         }
                     }) {
@@ -182,16 +185,27 @@ fun ScienceExerciseApp(userName: String, topic: ScienceTopic, mode: ScienceGameM
     var score by remember { mutableStateOf(0) }
     var showResult by remember { mutableStateOf(false) }
     var selectedOption by remember { mutableStateOf<Int?>(null) }
-    var showExplanation by remember { mutableStateOf(false) }
     var timeLeft by remember { mutableStateOf(15) }
     var timeSpentSeconds by remember { mutableStateOf(0) }
+    val wrongAnswersList = remember { mutableStateListOf<WrongAnswer>() }
 
-    val currentQuestion = topic.questions[currentQuestionIndex]
+    val questions = remember(topic) {
+        topic.questions.shuffled().take(10).map { q ->
+            val correctText = q.options[q.correctAnswerIndex]
+            val shuffledOptions = q.options.shuffled()
+            q.copy(
+                options = shuffledOptions,
+                correctAnswerIndex = shuffledOptions.indexOf(correctText)
+            )
+        }
+    }
+
+    val currentQuestion = questions[currentQuestionIndex]
 
     LaunchedEffect(showResult) {
         if (showResult) {
             val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
-            onSaveScore(ScoreRecord(userName, "SCIENCE", "${topic.name} (${mode.label})", score, topic.questions.size, sdf.format(Date())))
+            onSaveScore(ScoreRecord(userName, "SCIENCE", "${topic.name} (${mode.label})", score, questions.size, sdf.format(Date())))
         }
     }
 
@@ -210,12 +224,13 @@ fun ScienceExerciseApp(userName: String, topic: ScienceTopic, mode: ScienceGameM
                 delay(1000)
                 timeLeft--
             } else {
-                if (currentQuestionIndex < topic.questions.size - 1) {
+                if (currentQuestionIndex < questions.size - 1) {
+                    wrongAnswersList.add(WrongAnswer(currentQuestion.question, "Timed Out", currentQuestion.options[currentQuestion.correctAnswerIndex]))
                     currentQuestionIndex++
                     timeLeft = 15
                     selectedOption = null
-                    showExplanation = false
                 } else {
+                    wrongAnswersList.add(WrongAnswer(currentQuestion.question, "Timed Out", currentQuestion.options[currentQuestion.correctAnswerIndex]))
                     showResult = true
                 }
             }
@@ -226,9 +241,9 @@ fun ScienceExerciseApp(userName: String, topic: ScienceTopic, mode: ScienceGameM
         ResultsScreen(
             name = userName,
             score = score,
-            total = topic.questions.size,
+            total = questions.size,
             modeName = "${topic.name} (${mode.label})",
-            mistakes = emptyList(),
+            mistakes = wrongAnswersList,
             timeSpent = timeSpentSeconds,
             onRestart = onBack
         )
@@ -243,7 +258,7 @@ fun ScienceExerciseApp(userName: String, topic: ScienceTopic, mode: ScienceGameM
             }
 
             Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Question ${currentQuestionIndex + 1} of ${topic.questions.size}")
+                Text("Question ${currentQuestionIndex + 1} of ${questions.size}")
                 
                 val displayFontSize = if (currentQuestion.question.length > 30) 20.sp else 28.sp
                 Text(
@@ -257,18 +272,18 @@ fun ScienceExerciseApp(userName: String, topic: ScienceTopic, mode: ScienceGameM
 
                 currentQuestion.options.forEachIndexed { index, option ->
                     val isSelected = selectedOption == index
-                    val color = when {
-                        (showExplanation || selectedOption != null) && index == currentQuestion.correctAnswerIndex -> Color(0xFF4CAF50)
-                        isSelected && index != currentQuestion.correctAnswerIndex -> Color(0xFFF44336)
-                        else -> Color.White
-                    }
+                    // Neutral color for selection
+                    val color = if (isSelected) Color(0xFFFF9800) else Color.White
 
                     OutlinedButton(
                         onClick = {
                             if (selectedOption == null) {
                                 selectedOption = index
-                                if (index == currentQuestion.correctAnswerIndex) score++
-                                showExplanation = true
+                                if (index == currentQuestion.correctAnswerIndex) {
+                                    score++
+                                } else {
+                                    wrongAnswersList.add(WrongAnswer(currentQuestion.question, option, currentQuestion.options[currentQuestion.correctAnswerIndex]))
+                                }
                             }
                         },
                         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).height(56.dp),
@@ -280,24 +295,13 @@ fun ScienceExerciseApp(userName: String, topic: ScienceTopic, mode: ScienceGameM
                     }
                 }
 
-                if (showExplanation || selectedOption != null) {
-                    if (showExplanation) {
-                        Text(
-                            text = currentQuestion.explanation,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Color.Gray,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(top = 16.dp)
-                        )
-                    }
-
+                if (selectedOption != null) {
                     Spacer(modifier = Modifier.height(24.dp))
                     Button(
                         onClick = {
-                            if (currentQuestionIndex < topic.questions.size - 1) {
+                            if (currentQuestionIndex < questions.size - 1) {
                                 currentQuestionIndex++
                                 selectedOption = null
-                                showExplanation = false
                                 timeLeft = 15
                             } else {
                                 showResult = true
@@ -306,7 +310,7 @@ fun ScienceExerciseApp(userName: String, topic: ScienceTopic, mode: ScienceGameM
                         modifier = Modifier.fillMaxWidth().height(56.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
                     ) {
-                        Text(if (currentQuestionIndex < topic.questions.size - 1) "NEXT" else "FINISH")
+                        Text(if (currentQuestionIndex < questions.size - 1) "NEXT" else "FINISH")
                     }
                 }
 
