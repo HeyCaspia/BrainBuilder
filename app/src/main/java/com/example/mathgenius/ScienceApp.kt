@@ -3,15 +3,13 @@ package com.example.mathgenius
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,17 +17,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import android.speech.tts.TextToSpeech
 import java.util.Locale
 import java.util.Date
 import java.text.SimpleDateFormat
 
 enum class ScienceDifficultyLevel(val label: String) {
-    TODDLER("Toddler"), GRADE_3("Grade 3"), GRADE_4("Grade 4"), GRADE_5("Grade 5")
+    TODDLER("Toddler"), GRADE_1("Grade 1"), GRADE_3("Grade 3"), GRADE_4("Grade 4"), GRADE_6("Grade 6")
 }
 
 enum class ScienceGameMode(val label: String) {
@@ -54,13 +54,33 @@ sealed class ScienceScreen {
     data class TopicSelection(val level: ScienceDifficultyLevel) : ScienceScreen()
     data class GameModeSelection(val level: ScienceDifficultyLevel, val topic: ScienceTopic) : ScienceScreen()
     data class Exercise(val level: ScienceDifficultyLevel, val topic: ScienceTopic, val mode: ScienceGameMode) : ScienceScreen()
-    data class Result(val score: Int, val total: Int, val level: ScienceDifficultyLevel) : ScienceScreen()
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
 fun ScienceApp(userName: String, onExit: () -> Unit, onSaveScore: (ScoreRecord) -> Unit) {
     var currentScreen by remember { mutableStateOf<ScienceScreen>(ScienceScreen.LevelSelection) }
+    
+    val context = LocalContext.current
+    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+
+    DisposableEffect(Unit) {
+        val ttsInstance = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = Locale.US
+            }
+        }
+        tts = ttsInstance
+        onDispose {
+            ttsInstance.stop()
+            ttsInstance.shutdown()
+        }
+    }
+
+    fun speak(text: String) {
+        val processedText = text.replace(Regex("_+"), " blank ")
+        tts?.speak(processedText, TextToSpeech.QUEUE_FLUSH, null, null)
+    }
 
     Scaffold(
         topBar = {
@@ -71,12 +91,13 @@ fun ScienceApp(userName: String, onExit: () -> Unit, onSaveScore: (ScoreRecord) 
                         when (currentScreen) {
                             is ScienceScreen.LevelSelection -> onExit()
                             is ScienceScreen.TopicSelection -> currentScreen = ScienceScreen.LevelSelection
-                            is ScienceScreen.GameModeSelection -> currentScreen = ScienceScreen.TopicSelection((currentScreen as ScienceScreen.GameModeSelection).level)
-                            is ScienceScreen.Exercise -> {
-                                val currentLevel = (currentScreen as ScienceScreen.Exercise).level
-                                currentScreen = ScienceScreen.TopicSelection(currentLevel)
+                            is ScienceScreen.GameModeSelection -> {
+                                currentScreen = ScienceScreen.TopicSelection((currentScreen as ScienceScreen.GameModeSelection).level)
                             }
-                            is ScienceScreen.Result -> currentScreen = ScienceScreen.LevelSelection
+                            is ScienceScreen.Exercise -> {
+                                val level = (currentScreen as ScienceScreen.Exercise).level
+                                currentScreen = ScienceScreen.TopicSelection(level)
+                            }
                         }
                     }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back")
@@ -114,11 +135,12 @@ fun ScienceApp(userName: String, onExit: () -> Unit, onSaveScore: (ScoreRecord) 
                             userName = userName,
                             topic = screen.topic,
                             mode = screen.mode,
+                            showSpeakButton = (screen.level == ScienceDifficultyLevel.TODDLER || screen.level == ScienceDifficultyLevel.GRADE_1),
+                            onSpeak = { speak(it) },
                             onBack = { currentScreen = ScienceScreen.TopicSelection(screen.level) },
                             onSaveScore = onSaveScore
                         )
                     }
-                    is ScienceScreen.Result -> {}
                 }
             }
         }
@@ -131,13 +153,30 @@ fun ScienceLevelSelectionScreen(name: String, onLevelSelected: (ScienceDifficult
         Text("Welcome, $name", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Text("Select your level:", modifier = Modifier.padding(bottom = 32.dp))
         ScienceDifficultyLevel.values().forEach { level ->
-            Button(
-                onClick = { onLevelSelected(level) },
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).height(60.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF9800))
-            ) {
-                Text(level.label, fontSize = 18.sp, color = Color.White)
-            }
+            ScienceLevelCard(level) { onLevelSelected(level) }
+        }
+    }
+}
+
+@Composable
+fun ScienceLevelCard(level: ScienceDifficultyLevel, onClick: () -> Unit) {
+    val (title, descText, color) = when (level) {
+        ScienceDifficultyLevel.TODDLER -> Triple("Toddlers", "Fun & Simple Science", Color(0xFFFFB74D))
+        ScienceDifficultyLevel.GRADE_1 -> Triple("Grade 1", "Discovering World", Color(0xFFFF8A65))
+        ScienceDifficultyLevel.GRADE_3 -> Triple("Grade 3", "Exploring Nature", Color(0xFF81C784))
+        ScienceDifficultyLevel.GRADE_4 -> Triple("Grade 4", "Energy & Earth", Color(0xFF64B5F6))
+        ScienceDifficultyLevel.GRADE_6 -> Triple("Grade 6", "Systems & Space", Color(0xFFBA68C8))
+    }
+
+    Button(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp).height(80.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = color)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(text = title, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(text = descText, fontSize = 14.sp)
         }
     }
 }
@@ -180,7 +219,7 @@ fun ScienceGameModeSelectionScreen(topic: ScienceTopic, onModeSelected: (Science
 }
 
 @Composable
-fun ScienceExerciseApp(userName: String, topic: ScienceTopic, mode: ScienceGameMode, onBack: () -> Unit, onSaveScore: (ScoreRecord) -> Unit) {
+fun ScienceExerciseApp(userName: String, topic: ScienceTopic, mode: ScienceGameMode, showSpeakButton: Boolean = false, onSpeak: (String) -> Unit = {}, onBack: () -> Unit, onSaveScore: (ScoreRecord) -> Unit) {
     var currentQuestionIndex by remember { mutableStateOf(0) }
     var score by remember { mutableStateOf(0) }
     var showResult by remember { mutableStateOf(false) }
@@ -212,7 +251,7 @@ fun ScienceExerciseApp(userName: String, topic: ScienceTopic, mode: ScienceGameM
     LaunchedEffect(showResult) {
         if (!showResult) {
             while (true) {
-                delay(1000L)
+                delay(1000)
                 timeSpentSeconds++
             }
         }
@@ -250,8 +289,17 @@ fun ScienceExerciseApp(userName: String, topic: ScienceTopic, mode: ScienceGameM
     } else {
         Column {
             Column(modifier = Modifier.fillMaxWidth().background(Color(0xFFFFF3E0)).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Examinee: $userName", fontWeight = FontWeight.Bold)
-                Text("Category: ${topic.name} - ${mode.label}", style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Examinee: $userName", fontWeight = FontWeight.Bold)
+                        Text("Category: ${topic.name} - ${mode.label}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (showSpeakButton) {
+                        IconButton(onClick = { onSpeak(currentQuestion.question) }) {
+                            Icon(Icons.Filled.VolumeUp, contentDescription = "Speak", tint = Color(0xFFE65100))
+                        }
+                    }
+                }
                 if (mode == ScienceGameMode.TIME_TRIAL) {
                     Text("Time: ${timeLeft}s", color = if (timeLeft < 5) Color.Red else Color.Black, fontWeight = FontWeight.ExtraBold)
                 }
@@ -361,6 +409,44 @@ object ScienceContent {
                 ScienceQuestion(10, "A rainbow has many...?", listOf("Sounds", "Colors", "Smells", "Tastes"), 1, "Rainbows have seven colors.")
             ))
         ),
+        ScienceDifficultyLevel.GRADE_1 to listOf(
+            ScienceTopic("Living & Non-living", listOf(
+                ScienceQuestion(1, "Which of these is a living thing?", listOf("Stone", "Bird", "Pencil", "Book"), 1, "Birds breathe, grow, and need food."),
+                ScienceQuestion(2, "What do plants need to grow?", listOf("Soda", "Sunlight and Water", "Pizza", "Toys"), 1, "Sunlight and water are essential for plants."),
+                ScienceQuestion(3, "Which is a non-living thing?", listOf("Cat", "Tree", "Car", "Flower"), 2, "Cars do not grow or breathe on their own."),
+                ScienceQuestion(4, "Living things need ____ to breathe.", listOf("Air", "Sand", "Milk", "Dust"), 0, "Oxygen from air is needed for life."),
+                ScienceQuestion(5, "Can a rock grow bigger by itself?", listOf("Yes", "No"), 1, "Rocks are non-living and do not grow."),
+                ScienceQuestion(6, "Which part of a plant is usually green?", listOf("Roots", "Leaves", "Trunk", "Seeds"), 1, "Leaves contain chlorophyll to make food."),
+                ScienceQuestion(7, "A puppy grows into a ____.", listOf("Cat", "Dog", "Bird", "Fish"), 1, "Puppies are young dogs."),
+                ScienceQuestion(8, "Living things can have ____.", listOf("Batteries", "Babies", "Engines", "Wheels"), 1, "Living things reproduce (have babies)."),
+                ScienceQuestion(9, "Which of these moves on its own?", listOf("Ball", "Rabbit", "Chair", "Table"), 1, "Animals can move themselves."),
+                ScienceQuestion(10, "A chair is a living thing.", listOf("True", "False"), 1, "Chairs do not eat, breathe, or grow.")
+            )),
+            ScienceTopic("My Body", listOf(
+                ScienceQuestion(1, "Which part of your body helps you walk?", listOf("Hands", "Ears", "Legs", "Nose"), 2, "Legs and feet move us around."),
+                ScienceQuestion(2, "How many fingers do most people have on one hand?", listOf("3", "5", "8", "10"), 1, "We have 5 fingers per hand."),
+                ScienceQuestion(3, "Which organ is inside your chest and beats?", listOf("Brain", "Stomach", "Heart", "Liver"), 2, "The heart pumps blood."),
+                ScienceQuestion(4, "You use your ____ to think.", listOf("Feet", "Brain", "Elbow", "Toes"), 1, "The brain is the control center."),
+                ScienceQuestion(5, "Where is your knee?", listOf("On your arm", "On your leg", "On your head", "On your back"), 1, "The knee is a joint in the leg."),
+                ScienceQuestion(6, "What protects your brain?", listOf("Skin", "Skull (Bone)", "Hair", "Ears"), 1, "The skull is a hard bone protecting the brain."),
+                ScienceQuestion(7, "Which part is between your head and shoulders?", listOf("Waist", "Neck", "Ankle", "Wrist"), 1, "The neck connects the head to the body."),
+                ScienceQuestion(8, "You have two ____ to hear.", listOf("Eyes", "Noses", "Ears", "Mouths"), 2, "Ears are for the sense of hearing."),
+                ScienceQuestion(9, "What covers your whole body?", listOf("Hair", "Skin", "Clothes", "Leaves"), 1, "Skin is the largest organ of the body."),
+                ScienceQuestion(10, "Your stomach helps you ____.", listOf("See", "Breathe", "Digest food", "Run"), 2, "The stomach breaks down food.")
+            )),
+            ScienceTopic("Animals around Us", listOf(
+                ScienceQuestion(1, "Which animal can fly?", listOf("Fish", "Dog", "Bird", "Snake"), 2, "Birds have wings to fly."),
+                ScienceQuestion(2, "An animal that lives in water is a ____.", listOf("Lion", "Horse", "Fish", "Elephant"), 2, "Fish use gills to breathe underwater."),
+                ScienceQuestion(3, "Which animal gives us wool?", listOf("Pig", "Sheep", "Chicken", "Cow"), 1, "Sheep's hair is used to make wool."),
+                ScienceQuestion(4, "A kitten is a baby ____.", listOf("Tiger", "Lion", "Cat", "Bear"), 2, "Kittens grow into cats."),
+                ScienceQuestion(5, "Which animal is the 'King of the Jungle'?", listOf("Giraffe", "Monkey", "Lion", "Zebra"), 2, "Lions are famous jungle leaders."),
+                ScienceQuestion(6, "Where do bees live?", listOf("Nests", "Hives", "Burrows", "Webs"), 1, "Bees build hives for honey."),
+                ScienceQuestion(7, "Which animal has a very long neck?", listOf("Hippo", "Giraffe", "Rhino", "Bear"), 1, "Giraffes reach tall trees with their necks."),
+                ScienceQuestion(8, "An animal with a shell on its back is a ____.", listOf("Rabbit", "Turtle", "Fox", "Wolf"), 1, "Turtles use shells for protection."),
+                ScienceQuestion(9, "Which animal hops and loves carrots?", listOf("Dog", "Rabbit", "Cat", "Cow"), 1, "Rabbits are known for hopping."),
+                ScienceQuestion(10, "Dogs have four legs.", listOf("True", "False"), 0, "Most mammals like dogs have four legs.")
+            ))
+        ),
         ScienceDifficultyLevel.GRADE_3 to listOf(
             ScienceTopic("Plants", listOf(
                 ScienceQuestion(1, "What part of the plant grows underground?", listOf("Stem", "Leaves", "Roots", "Flower"), 2, "Roots absorb water and nutrients."),
@@ -437,7 +523,7 @@ object ScienceContent {
                 ScienceQuestion(10, "What is the sudden discharge of electricity in the sky?", listOf("Thunder", "Lightning", "Rain", "Hail"), 1, "Lightning is a giant spark.")
             ))
         ),
-        ScienceDifficultyLevel.GRADE_5 to listOf(
+        ScienceDifficultyLevel.GRADE_6 to listOf(
             ScienceTopic("Human Body Systems", listOf(
                 ScienceQuestion(1, "Which system pumps blood around the body?", listOf("Respiratory", "Digestive", "Circulatory", "Nervous"), 2, "The heart is the center of the circulatory system."),
                 ScienceQuestion(2, "Where does digestion begin?", listOf("Stomach", "Small Intestine", "Mouth", "Esophagus"), 2, "Saliva starts breaking down food in the mouth."),

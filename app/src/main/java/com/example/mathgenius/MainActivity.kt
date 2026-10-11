@@ -2,6 +2,7 @@ package com.example.mathgenius
 
 import android.os.Bundle
 import android.media.MediaPlayer
+import android.speech.tts.TextToSpeech
 import java.util.Locale
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -19,6 +20,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -35,8 +37,37 @@ import kotlin.random.Random
 import kotlinx.coroutines.delay
 
 enum class Grade(val label: String) { TODDLER("Toddler"), GRADE_1("Grade 1"), GRADE_3("Grade 3"), GRADE_4("Grade 4"), GRADE_6("Grade 6") }
-enum class Topic(val label: String) { COUNTING("Counting"), ADDITION("Addition"), SUBTRACTION("Subtraction"), MULTIPLICATION("Multiplication"), DIVISION("Division"), FRACTIONS("Fractions"), PEMDAS("PEMDAS"), ALGEBRA("Algebra"), GEOMETRY("Geometry"), WORD_PROBLEMS("Word Problems") }
+enum class Topic(val label: String) { COUNTING("Counting"), ADDITION("Addition"), SUBTRACTION("Subtraction"), MULTIPLICATION("Multiplication"), DIVISION("Division"), FRACTIONS("Fractions"), PEMDAS("PEMDAS"), ALGEBRA("Algebra"), GEOMETRY("Geometry"), WORD_PROBLEMS("Word Problems"), SUMMATIVE_TEST("Summative Test") }
 data class WrongAnswer(val question: String, val userAnswer: String, val correctAnswer: String)
+
+data class Grade1MathQuestion(
+    val question: String,
+    val options: List<String>,
+    val correctAnswerIndex: Int
+)
+
+val grade1SummativeTestQuestions = listOf(
+    Grade1MathQuestion("1. Which number is the smallest?", listOf("18", "28", "38", "48"), 0),
+    Grade1MathQuestion("2. Which number is the greatest?", listOf("42", "64", "57", "36"), 1),
+    Grade1MathQuestion("3. Which list is arranged from smallest to largest?", listOf("34, 32, 30", "61, 51, 41", "25, 35, 45", "78, 68, 58"), 2),
+    Grade1MathQuestion("4. Which list is arranged from greatest to smallest?", listOf("12, 22, 32", "45, 54, 64", "36, 46, 56", "81, 71, 61"), 3),
+    Grade1MathQuestion("5. What number comes next when counting by 2s: 12, 14, 16, ___?", listOf("17", "19", "18", "20"), 2),
+    Grade1MathQuestion("6. What number comes next when counting by 5s: 20, 25, 30, ___?", listOf("30", "35", "40", "45"), 1),
+    Grade1MathQuestion("7. What number comes next when counting by 10s: 40, 50, 60, ___?", listOf("70", "65", "75", "80"), 0),
+    Grade1MathQuestion("8. In 47, which digit is in the tens place?", listOf("7", "47", "0", "4"), 3),
+    Grade1MathQuestion("9. What is the value of 6 in 63?", listOf("60", "3", "6", "63"), 0),
+    Grade1MathQuestion("10. What is the value of 8 in 28?", listOf("20", "28", "8", "80"), 2),
+    Grade1MathQuestion("11. Which number has 5 tens and 2 ones?", listOf("25", "7", "50", "52"), 3),
+    Grade1MathQuestion("12. Which digit is in the ones place in 79?", listOf("7", "9", "70", "79"), 1),
+    Grade1MathQuestion("13. Mia has number cards 46, 64, and 54. Which is the greatest?", listOf("54", "46", "64", "44"), 2),
+    Grade1MathQuestion("14. Which number belongs between 38 and 40?", listOf("37", "41", "39", "42"), 2),
+    Grade1MathQuestion("15. Which statement about 72 is correct?", listOf("It has 2 tens and 7 ones.", "It has 7 tens and 2 ones.", "The value of 7 is 7.", "The value of 2 is 20."), 1),
+    Grade1MathQuestion("16. Which set continues counting by 5s from 45?", listOf("46, 47, 48", "50, 60, 70", "55, 65, 75", "50, 55, 60"), 3),
+    Grade1MathQuestion("17. Ben counts 10, 20, 30, 40. Which rule did he use?", listOf("Count by 10s", "Count by 5s", "Count backward", "Count by 2s"), 0),
+    Grade1MathQuestion("18. Which comparison is true?", listOf("31 = 13", "89 < 79", "45 > 54", "67 < 76"), 3),
+    Grade1MathQuestion("19. A number has 8 in the tens place and 4 in the ones place. What is it?", listOf("48", "80", "84", "12"), 2),
+    Grade1MathQuestion("20. Which number should replace the box: 95, 85, [box], 65?", listOf("90", "75", "70", "80"), 1)
+)
 
 data class ScoreRecord(
     val nickname: String,
@@ -52,6 +83,8 @@ sealed class MainScreen {
     object MathApp : MainScreen()
     object EnglishApp : MainScreen()
     object ScienceApp : MainScreen()
+    object AralingPanlipunanApp : MainScreen()
+    object FilipinoApp : MainScreen()
     object History : MainScreen()
 }
 
@@ -94,6 +127,8 @@ fun GeniusHub() {
                     onMathSelected = { currentScreen = MainScreen.MathApp },
                     onEnglishSelected = { currentScreen = MainScreen.EnglishApp },
                     onScienceSelected = { currentScreen = MainScreen.ScienceApp },
+                    onAralingPanlipunanSelected = { currentScreen = MainScreen.AralingPanlipunanApp },
+                    onFilipinoSelected = { currentScreen = MainScreen.FilipinoApp },
                     onHistorySelected = { currentScreen = MainScreen.History }
                 )
                 is MainScreen.MathApp -> {
@@ -115,6 +150,22 @@ fun GeniusHub() {
                 is MainScreen.ScienceApp -> {
                     BackHandler { currentScreen = MainScreen.Hub }
                     ScienceApp(
+                        userName = globalName, 
+                        onExit = { currentScreen = MainScreen.Hub },
+                        onSaveScore = { saveScore(it) }
+                    )
+                }
+                is MainScreen.AralingPanlipunanApp -> {
+                    BackHandler { currentScreen = MainScreen.Hub }
+                    AralingPanlipunanApp(
+                        userName = globalName, 
+                        onExit = { currentScreen = MainScreen.Hub },
+                        onSaveScore = { saveScore(it) }
+                    )
+                }
+                is MainScreen.FilipinoApp -> {
+                    BackHandler { currentScreen = MainScreen.Hub }
+                    FilipinoApp(
                         userName = globalName, 
                         onExit = { currentScreen = MainScreen.Hub },
                         onSaveScore = { saveScore(it) }
@@ -191,7 +242,15 @@ fun GlobalStartScreen(name: String, onNameChange: (String) -> Unit, onStart: () 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HubScreen(userName: String, onMathSelected: () -> Unit, onEnglishSelected: () -> Unit, onScienceSelected: () -> Unit, onHistorySelected: () -> Unit) {
+fun HubScreen(
+    userName: String, 
+    onMathSelected: () -> Unit, 
+    onEnglishSelected: () -> Unit, 
+    onScienceSelected: () -> Unit, 
+    onAralingPanlipunanSelected: () -> Unit,
+    onFilipinoSelected: () -> Unit,
+    onHistorySelected: () -> Unit
+) {
     val gradientBrush = Brush.verticalGradient(
         colors = listOf(Color(0xFFE3F2FD), Color(0xFFFFFFFF))
     )
@@ -224,10 +283,14 @@ fun HubScreen(userName: String, onMathSelected: () -> Unit, onEnglishSelected: (
             Spacer(modifier = Modifier.height(32.dp))
 
             SubjectCard("MATH FOR ALL", "🔢", Color(0xFF4CAF50), onMathSelected)
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             SubjectCard("ENGLISH FOR ALL", "📚", Color(0xFF2196F3), onEnglishSelected)
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(10.dp))
             SubjectCard("SCIENCE FOR ALL", "🔬", Color(0xFFFF9800), onScienceSelected)
+            Spacer(modifier = Modifier.height(10.dp))
+            SubjectCard("ARALING PANLIPUNAN", "🏛️", Color(0xFFE91E63), onAralingPanlipunanSelected)
+            Spacer(modifier = Modifier.height(10.dp))
+            SubjectCard("FILIPINO FOR ALL", "🇵🇭", Color(0xFFFF5722), onFilipinoSelected)
             
             Spacer(modifier = Modifier.height(32.dp))
             OutlinedButton(
@@ -275,7 +338,10 @@ fun HistoryScreen(records: List<ScoreRecord>, onBack: () -> Unit) {
                                 Text(record.subject, fontWeight = FontWeight.ExtraBold, color = when(record.subject) {
                                     "MATH" -> Color(0xFF4CAF50)
                                     "ENGLISH" -> Color(0xFF2196F3)
-                                    else -> Color(0xFFFF9800)
+                                    "SCIENCE" -> Color(0xFFFF9800)
+                                    "ARALING PANLIPUNAN" -> Color(0xFFE91E63)
+                                    "FILIPINO" -> Color(0xFFFF5722)
+                                    else -> Color(0xFF8E24AA)
                                 })
                                 Text(record.date, style = MaterialTheme.typography.bodySmall)
                             }
@@ -326,9 +392,12 @@ fun MathExamApp(userName: String, onExit: () -> Unit, onSaveScore: (ScoreRecord)
     var questionText by remember { mutableStateOf("") }
     var actualAnswer by remember { mutableStateOf("") }
     var userAnswer by remember { mutableStateOf("") }
+    var optionsList by remember { mutableStateOf<List<String>>(emptyList()) }
+    var selectedOptionIndex by remember { mutableStateOf<Int?>(null) }
+    var correctAnswerIndexState by remember { mutableStateOf(-1) }
     var timeLeft by remember { mutableStateOf(60) }
     var timeSpentSeconds by remember { mutableStateOf(0) }
-    val totalQuestions = 10
+    val totalQuestions = if (selectedTopic == Topic.SUMMATIVE_TEST) grade1SummativeTestQuestions.size else 10
 
     LaunchedEffect(isExamFinished) {
         if (isExamFinished) {
@@ -349,7 +418,17 @@ fun MathExamApp(userName: String, onExit: () -> Unit, onSaveScore: (ScoreRecord)
 
     fun generateQuestion(grade: Grade, topic: Topic) {
         userAnswer = ""
+        selectedOptionIndex = null
+        optionsList = emptyList()
+        correctAnswerIndexState = -1
         when (topic) {
+            Topic.SUMMATIVE_TEST -> {
+                val q = grade1SummativeTestQuestions[currentQuestionNum - 1]
+                questionText = q.question
+                optionsList = q.options
+                correctAnswerIndexState = q.correctAnswerIndex
+                actualAnswer = q.options[q.correctAnswerIndex]
+            }
             Topic.COUNTING -> {
                 val num = Random.nextInt(1, 10)
                 questionText = "How many apples? " + "🍎".repeat(num)
@@ -597,12 +676,31 @@ fun MathExamApp(userName: String, onExit: () -> Unit, onSaveScore: (ScoreRecord)
                             Text("Time: ${timeLeft}s", color = if (timeLeft < 10) Color.Red else Color.Black, fontWeight = FontWeight.ExtraBold)
                         }
                     }
-                    ExamScreen(currentQuestionNum, totalQuestions, questionText, userAnswer,
+                    ExamScreen(
+                        qNum = currentQuestionNum, 
+                        total = totalQuestions, 
+                        qText = questionText, 
+                        uAns = userAnswer,
+                        options = optionsList,
+                        selectedOption = selectedOptionIndex,
+                        showSpeakButton = false,
                         onAnswerChange = { userAnswer = it },
-                        onBack = { selectedTopic = null; currentQuestionNum = 1; score = 0; wrongAnswersList.clear() },
+                        onOptionClick = { index ->
+                            if (selectedOptionIndex == null) {
+                                selectedOptionIndex = index
+                                if (index == correctAnswerIndexState) {
+                                    score++
+                                } else {
+                                    wrongAnswersList.add(WrongAnswer(questionText, optionsList[index], actualAnswer))
+                                }
+                            }
+                        },
+                        onBack = { selectedTopic = null; currentQuestionNum = 1; score = 0; wrongAnswersList.clear(); selectedOptionIndex = null },
                         onSubmit = {
-                            if (userAnswer.trim() == actualAnswer) score++
-                            else wrongAnswersList.add(WrongAnswer(questionText, userAnswer, actualAnswer))
+                            if (optionsList.isEmpty()) {
+                                if (userAnswer.trim() == actualAnswer) score++
+                                else wrongAnswersList.add(WrongAnswer(questionText, userAnswer, actualAnswer))
+                            }
                             if (currentQuestionNum < totalQuestions) {
                                 currentQuestionNum++; generateQuestion(selectedGrade!!, selectedTopic!!)
                             } else { isExamFinished = true }
@@ -629,7 +727,7 @@ fun GradeSelectionScreen(name: String, onGradePicked: (Grade) -> Unit) {
 fun TopicSelectionScreen(grade: Grade, onTopicPicked: (Topic) -> Unit) {
     val topics = when (grade) {
         Grade.TODDLER -> listOf(Topic.COUNTING, Topic.ADDITION, Topic.SUBTRACTION)
-        Grade.GRADE_1 -> listOf(Topic.ADDITION, Topic.SUBTRACTION, Topic.MULTIPLICATION)
+        Grade.GRADE_1 -> listOf(Topic.ADDITION, Topic.SUBTRACTION, Topic.MULTIPLICATION, Topic.SUMMATIVE_TEST)
         Grade.GRADE_3 -> listOf(Topic.ADDITION, Topic.SUBTRACTION, Topic.MULTIPLICATION, Topic.DIVISION, Topic.GEOMETRY, Topic.WORD_PROBLEMS)
         Grade.GRADE_4 -> listOf(Topic.ADDITION, Topic.MULTIPLICATION, Topic.DIVISION, Topic.FRACTIONS, Topic.GEOMETRY, Topic.WORD_PROBLEMS)
         Grade.GRADE_6 -> listOf(Topic.DIVISION, Topic.FRACTIONS, Topic.PEMDAS, Topic.ALGEBRA, Topic.WORD_PROBLEMS)
@@ -644,23 +742,73 @@ fun TopicSelectionScreen(grade: Grade, onTopicPicked: (Topic) -> Unit) {
 }
 
 @Composable
-fun ExamScreen(qNum: Int, total: Int, qText: String, uAns: String, onAnswerChange: (String) -> Unit, onBack: () -> Unit, onSubmit: () -> Unit) {
+fun ExamScreen(
+    qNum: Int,
+    total: Int,
+    qText: String,
+    uAns: String,
+    options: List<String> = emptyList(),
+    selectedOption: Int? = null,
+    showSpeakButton: Boolean = false,
+    onSpeak: () -> Unit = {},
+    onAnswerChange: (String) -> Unit,
+    onOptionClick: (Int) -> Unit = {},
+    onBack: () -> Unit,
+    onSubmit: () -> Unit
+) {
     Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text("Question $qNum of $total")
-        val displayFontSize = if (qText.length > 15) 28.sp else 48.sp
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
+            Text("Question $qNum of $total")
+            if (showSpeakButton) {
+                IconButton(onClick = onSpeak) {
+                    Icon(Icons.Filled.VolumeUp, contentDescription = "Speak Question", tint = Color(0xFF4CAF50))
+                }
+            }
+        }
+        val displayFontSize = if (qText.length > 30) 20.sp else if (qText.length > 15) 26.sp else 40.sp
         Text(
             text = qText,
             fontSize = displayFontSize,
             fontWeight = FontWeight.Bold,
             textAlign = TextAlign.Center,
             lineHeight = displayFontSize * 1.2f,
-            modifier = Modifier.padding(vertical = 32.dp).fillMaxWidth()
+            modifier = Modifier.padding(vertical = 20.dp).fillMaxWidth()
         )
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.Center) {
-            OutlinedTextField(value = uAns, onValueChange = onAnswerChange, label = { Text("Answer") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f).padding(end = 8.dp), singleLine = true)
-            Button(onClick = onSubmit, modifier = Modifier.height(56.dp)) { Text("SUBMIT") }
+
+        if (options.isNotEmpty()) {
+            options.forEachIndexed { index, option ->
+                val isSelected = selectedOption == index
+                val color = if (isSelected) Color(0xFF4CAF50) else Color.White
+                val contentColor = if (isSelected) Color.White else Color.Black
+
+                OutlinedButton(
+                    onClick = { onOptionClick(index) },
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp).height(56.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(containerColor = color, contentColor = contentColor),
+                    enabled = selectedOption == null
+                ) {
+                    Text(option, fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+
+            if (selectedOption != null) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = onSubmit,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                ) {
+                    Text(if (qNum < total) "NEXT" else "FINISH", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.Center) {
+                OutlinedTextField(value = uAns, onValueChange = onAnswerChange, label = { Text("Answer") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), modifier = Modifier.weight(1f).padding(end = 8.dp), singleLine = true)
+                Button(onClick = onSubmit, modifier = Modifier.height(56.dp)) { Text("SUBMIT") }
+            }
         }
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(24.dp))
         OutlinedButton(onClick = onBack, modifier = Modifier.fillMaxWidth(0.5f)) { Text("GO BACK") }
     }
 }

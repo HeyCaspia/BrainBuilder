@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,11 +20,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import android.speech.tts.TextToSpeech
 import java.util.Locale
 import java.util.Date
 import java.text.SimpleDateFormat
@@ -58,6 +61,27 @@ sealed class EnglishScreen {
 @Composable
 fun EnglishApp(userName: String, onExit: () -> Unit, onSaveScore: (ScoreRecord) -> Unit) {
     var currentScreen by remember { mutableStateOf<EnglishScreen>(EnglishScreen.LevelSelection) }
+    
+    val context = LocalContext.current
+    var tts by remember { mutableStateOf<TextToSpeech?>(null) }
+
+    DisposableEffect(Unit) {
+        val ttsInstance = TextToSpeech(context) { status ->
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = Locale.US
+            }
+        }
+        tts = ttsInstance
+        onDispose {
+            ttsInstance.stop()
+            ttsInstance.shutdown()
+        }
+    }
+
+    fun speak(text: String) {
+        val processedText = text.replace(Regex("_+"), " blank ")
+        tts?.speak(processedText, TextToSpeech.QUEUE_FLUSH, null, null)
+    }
 
     Scaffold(
         topBar = {
@@ -105,6 +129,8 @@ fun EnglishApp(userName: String, onExit: () -> Unit, onSaveScore: (ScoreRecord) 
                         EnglishExerciseApp(
                             userName = userName,
                             topic = screen.topic,
+                            showSpeakButton = (englishLevels.find { it.topics.any { t -> t.id == screen.topic.id } }?.id in listOf("kinder", "grade1")),
+                            onSpeak = { speak(it) },
                             onBack = { currentScreen = backScreen },
                             onSaveScore = onSaveScore
                         )
@@ -164,7 +190,7 @@ fun EnglishTopicSelectionScreen(level: EnglishLevel, onTopicSelected: (EnglishTo
 }
 
 @Composable
-fun EnglishExerciseApp(userName: String, topic: EnglishTopic, onBack: () -> Unit, onSaveScore: (ScoreRecord) -> Unit) {
+fun EnglishExerciseApp(userName: String, topic: EnglishTopic, showSpeakButton: Boolean = false, onSpeak: (String) -> Unit = {}, onBack: () -> Unit, onSaveScore: (ScoreRecord) -> Unit) {
     var currentExerciseIndex by remember { mutableStateOf(0) }
     var score by remember { mutableStateOf(0) }
     var showResult by remember { mutableStateOf(false) }
@@ -174,7 +200,11 @@ fun EnglishExerciseApp(userName: String, topic: EnglishTopic, onBack: () -> Unit
     val wrongAnswersList = remember { mutableStateListOf<WrongAnswer>() }
 
     val exercises = remember(topic) { 
-        topic.exercises.shuffled().take(10).map { it.copy(options = it.options.shuffled()) }
+        if (topic.id.startsWith("summative_test")) {
+            topic.exercises
+        } else {
+            topic.exercises.shuffled().take(10).map { it.copy(options = it.options.shuffled()) }
+        }
     }
 
     LaunchedEffect(showResult) {
@@ -207,8 +237,17 @@ fun EnglishExerciseApp(userName: String, topic: EnglishTopic, onBack: () -> Unit
         val exercise = exercises[currentExerciseIndex]
         Column {
             Column(modifier = Modifier.fillMaxWidth().background(Color(0xFFE3F2FD)).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Examinee: $userName", fontWeight = FontWeight.Bold)
-                Text("Category: ${topic.name}", style = MaterialTheme.typography.bodySmall)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Examinee: $userName", fontWeight = FontWeight.Bold)
+                        Text("Category: ${topic.name}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    if (showSpeakButton) {
+                        IconButton(onClick = { onSpeak(exercise.question) }) {
+                            Icon(Icons.Filled.VolumeUp, contentDescription = "Speak", tint = Color(0xFF2196F3))
+                        }
+                    }
+                }
             }
             
             Column(modifier = Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -255,6 +294,8 @@ fun EnglishExerciseApp(userName: String, topic: EnglishTopic, onBack: () -> Unit
                                 isAnswerCorrect = correct
                                 if (correct) {
                                     score++
+                                } else {
+                                    wrongAnswersList.add(WrongAnswer(exercise.question, option, exercise.correctAnswer))
                                 }
                             }
                         },
@@ -455,7 +496,33 @@ val englishLevels = listOf(
                 EnglishExercise("Opposite of 'Old'?", listOf("New", "Modern", "Both"), "Both"),
                 EnglishExercise("Identify adjective: 'Gloomy weather.'", listOf("Weather", "Was", "Gloomy"), "Gloomy"),
                 EnglishExercise("Which describes color?", listOf("Fast", "Emerald", "Strong"), "Emerald")
-            ))
+            )),
+            EnglishTopic(
+                id = "summative_test_g4",
+                name = "First Summative Test 📝",
+                exercises = listOf(
+                    EnglishExercise("1. Which word means the same as “rapid”?", listOf("fast", "slow", "quiet", "late"), "fast"),
+                    EnglishExercise("2. Which word is opposite in meaning to “ancient”?", listOf("old", "modern", "historic", "traditional"), "modern"),
+                    EnglishExercise("3. What does the prefix “un-” mean in “unhappy”?", listOf("again", "before", "not", "full of"), "not"),
+                    EnglishExercise("4. Which context clue helps define “arid” in “The arid land was dry and had little rain”?", listOf("land", "was", "the", "dry and had little rain"), "dry and had little rain"),
+                    EnglishExercise("5. Which sentence has a compound subject?", listOf("Lina reads.", "Read the book.", "Lina and Ben read.", "In the library."), "Lina and Ben read."),
+                    EnglishExercise("6. Which sentence has a compound predicate?", listOf("The pupils and teacher read.", "The pupils read and discuss the story.", "Reading the story", "The long story"), "The pupils read and discuss the story."),
+                    EnglishExercise("7. Which conjunction shows contrast?", listOf("but", "and", "or", "so"), "but"),
+                    EnglishExercise("8. Which sentence is compound?", listOf("The players returned.", "After the rain", "Returning players", "The rain stopped, so the players returned."), "The rain stopped, so the players returned."),
+                    EnglishExercise("9. Read: “Mangroves protect shorelines and provide homes for young fish.” What is the main idea?", listOf("Mangroves help shores and marine life.", "Fish live only in rivers.", "Shorelines have roads.", "Mangroves are tall buildings."), "Mangroves help shores and marine life."),
+                    EnglishExercise("10. Which detail supports the main idea?", listOf("They grow on mountains only.", "They are made of plastic.", "They provide homes for young fish.", "They remove all water."), "They provide homes for young fish."),
+                    EnglishExercise("11. What text structure lists similarities and differences?", listOf("sequence", "cause and effect", "problem and solution", "compare and contrast"), "compare and contrast"),
+                    EnglishExercise("12. Which signal word suggests cause and effect?", listOf("first", "because", "similarly", "beside"), "because"),
+                    EnglishExercise("13. What is the author’s purpose in a safety guide?", listOf("to inform and instruct", "to entertain with fantasy only", "to sell an unrelated product", "to hide information"), "to inform and instruct"),
+                    EnglishExercise("14. Which statement is a fact?", listOf("Rain is the best weather.", "Blue is the prettiest color.", "Water freezes at 0°C under standard conditions.", "All parks are exciting."), "Water freezes at 0°C under standard conditions."),
+                    EnglishExercise("15. Which is an opinion?", listOf("The program starts at 8:00 a.m.", "The festival dance is beautiful.", "The poster has three pictures.", "The hall is in the barangay."), "The festival dance is beautiful."),
+                    EnglishExercise("16. Which source is most reliable for a weather warning?", listOf("Anonymous message", "Unverified post", "A guess", "Official weather agency advisory"), "Official weather agency advisory"),
+                    EnglishExercise("17. Which summary is best?", listOf("Mangroves protect coasts and support young fish.", "Mangroves are green, and I like green.", "The text has nine words.", "Fish are fun to watch."), "Mangroves protect coasts and support young fish."),
+                    EnglishExercise("18. What can be inferred when dark clouds gather and people open umbrellas?", listOf("It is snowing.", "The day is becoming hotter.", "The umbrellas are broken.", "Rain is likely."), "Rain is likely."),
+                    EnglishExercise("19. Which sentence uses correct subject-verb agreement?", listOf("The children helps the community.", "The child help the community.", "The children help the community.", "The children helping the community."), "The children helping the community."),
+                    EnglishExercise("20. Which response uses evidence?", listOf("I just think so.", "I think mangroves are important because the text says they protect shorelines.", "Everyone must agree.", "The page looks nice."), "I think mangroves are important because the text says they protect shorelines.")
+                )
+            )
         )
     ),
     EnglishLevel(
@@ -507,7 +574,33 @@ val englishLevels = listOf(
                 EnglishExercise("Passive voice?", listOf("He broke it.", "It was broken.", "It broke."), "It was broken."),
                 EnglishExercise("Complex sentence?", listOf("I like milk.", "Milk and cookies.", "Since hungry, I ate."), "Since I was hungry, I ate."),
                 EnglishExercise("Plural of 'Phenomenon'?", listOf("Phenomenons", "Phenomena", "Phenomenies"), "Phenomena")
-            ))
+            )),
+            EnglishTopic(
+                id = "summative_test_g6",
+                name = "First Summative Test 📝",
+                exercises = listOf(
+                    EnglishExercise("1. In the sentence \"The resilient community rebuilt after the storm,\" what does resilient mean?", listOf("able to recover from difficulty", "easily broken", "unwilling to work", "very quiet"), "able to recover from difficulty"),
+                    EnglishExercise("2. Which word has the most positive connotation?", listOf("stubborn", "determined", "reckless", "careless"), "determined"),
+                    EnglishExercise("3. Which sentence uses formal language?", listOf("The group's gonna check it out.", "Hey, look at this stuff!", "The committee will review the proposal tomorrow.", "That plan is kinda okay."), "The committee will review the proposal tomorrow."),
+                    EnglishExercise("4. Which point of view uses \"I\" or \"we\"?", listOf("second person", "third person omniscient", "third person objective", "first person"), "first person"),
+                    EnglishExercise("5. Which event should come first in a logical narrative?", listOf("The solution is evaluated.", "The results are reported.", "The learner identifies the problem.", "The conclusion is written."), "The learner identifies the problem."),
+                    EnglishExercise("6. What is the climax of a story?", listOf("The list of characters", "The point of greatest tension or turning point", "The opening description only", "The author's biography"), "The point of greatest tension or turning point"),
+                    EnglishExercise("7. Which detail best supports the theme \"cooperation solves problems\"?", listOf("Neighbors worked together to repair the bridge.", "The bridge was painted blue.", "The river was wide.", "It rained on Tuesday."), "Neighbors worked together to repair the bridge."),
+                    EnglishExercise("8. What does an author's point of view affect?", listOf("The number of pages only", "The font size", "The date of printing", "How events and ideas are presented"), "How events and ideas are presented"),
+                    EnglishExercise("9. Which statement is an inference?", listOf("The empty shelves suggest supplies sold quickly.", "The shelves are wooden.", "The sign says OPEN.", "There are four aisles."), "The empty shelves suggest supplies sold quickly."),
+                    EnglishExercise("10. What is the purpose of an informational text with steps?", listOf("To entertain with imaginary characters", "To express rhythm only", "To explain how to do something", "To hide information"), "To explain how to do something"),
+                    EnglishExercise("11. Which is a fact?", listOf("Summer is the best season.", "This book is beautiful.", "Blue is the happiest color.", "Water freezes at 0°C under standard conditions."), "Water freezes at 0°C under standard conditions."),
+                    EnglishExercise("12. Which evidence is most relevant to a claim about school waste?", listOf("A joke about garbage", "Measured amounts of waste collected each day", "A drawing with no data", "An unrelated weather report"), "Measured amounts of waste collected each day"),
+                    EnglishExercise("13. Which sentence is compound?", listOf("Lina researched the topic, and Marco organized the notes.", "Lina researched carefully.", "After Lina researched, she wrote.", "Researching the topic, Lina smiled."), "Lina researched the topic, and Marco organized the notes."),
+                    EnglishExercise("14. Which sentence is complex?", listOf("The source was reliable.", "We read and took notes.", "Because the source was reliable, we used its data.", "Reliable sources and clear notes."), "Because the source was reliable, we used its data."),
+                    EnglishExercise("15. Which transition shows cause and effect?", listOf("meanwhile", "therefore", "for example", "first"), "therefore"),
+                    EnglishExercise("16. Which revision improves clarity?", listOf("The council, stuff, did it.", "It was done by them somehow.", "The thing happened there.", "The council approved the project after reviewing the evidence."), "The council approved the project after reviewing the evidence."),
+                    EnglishExercise("17. Which headline is most objective?", listOf("Community Opens New Reading Center", "Amazing Center Changes Everything!", "Best Project Ever!", "You Will Not Believe This Center!"), "Community Opens New Reading Center"),
+                    EnglishExercise("18. Which statement shows propaganda through bandwagon?", listOf("The product costs ₱50.", "The event begins at 8:00.", "The report lists three findings.", "Everyone is joining, so you should join too."), "Everyone is joining, so you should join too."),
+                    EnglishExercise("19. Before sharing an online article, what should a learner do?", listOf("Share it based on the title", "Trust it because it has many likes", "Check the author, evidence, date, and other reliable sources", "Ignore the publication date"), "Check the author, evidence, date, and other reliable sources"),
+                    EnglishExercise("20. Which response best evaluates a text?", listOf("I agree because it is long.", "The claim is convincing because two reliable sources provide consistent evidence.", "It must be true because it is online.", "The pictures are colorful, so every claim is correct."), "The claim is convincing because two reliable sources provide consistent evidence.")
+                )
+            )
         )
     )
 )
